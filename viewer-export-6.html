@@ -1,0 +1,686 @@
+<!doctype html><html><head><meta charset='utf-8'><script>(function(){
+      try{
+        const send=(t,p)=>parent.postMessage({type:t,payload:p},'*');
+
+        // Console
+        ['log','info','warn','error'].forEach(k=>{
+          const o=console[k];
+          console[k]=function(){
+            try{
+              send('console',{level:k,args:[...arguments].map(a=>{try{return typeof a==='string'?a:JSON.stringify(a)}catch(e){return String(a)}})});
+            }catch(e){}
+            o.apply(console,arguments);
+          };
+        });
+
+        // Errors
+        window.addEventListener('error',e=>send('error',{message:e.message,stack:e.error&&e.error.stack,lineno:e.lineno,colno:e.colno,filename:e.filename}));
+        window.addEventListener('unhandledrejection',e=>send('error',{message:String(e.reason||'Unhandled rejection')}));
+
+        // Network: fetch
+        try{
+          const ofetch = window.fetch;
+          window.fetch = async function(){
+            const u = arguments[0]; const init = arguments[1]||{};
+            send('net',{kind:'fetch',url:String(u),method:(init.method||'GET')});
+            try{
+              const res = await ofetch.apply(this, arguments);
+              send('net',{kind:'fetch-resp',url:String(u),status:res.status});
+              return res;
+            }catch(err){
+              send('net',{kind:'fetch-error',url:String(u),error:String(err)});
+              throw err;
+            }
+          };
+        }catch(_){}
+
+        // Network: XHR
+        try{
+          const OXHR = XMLHttpRequest;
+          XMLHttpRequest = function(){
+            const x = new OXHR(); let url=''; let method='GET';
+            const oopen = x.open;
+            x.open = function(m,u){ method=m; url=u; return oopen.apply(this,arguments); };
+            x.addEventListener('load', ()=>send('net',{kind:'xhr',url:String(url),method:method,status:x.status}));
+            x.addEventListener('error',()=>send('net',{kind:'xhr-error',url:String(url),method:method}));
+            return x;
+          };
+        }catch(_){}
+      }catch(_){}
+    })();</script></head><body><!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
+  <title>SIMON • Hands-Free Voice Chat</title>
+  <meta name="description" content="Simon Advanced AI — hands-free voice chat that listens and talks back, remembers today, glows while speaking, and lets you trim history. iPhone-ready."/>
+  <meta name="theme-color" content="#070b16"/>
+  <link rel="manifest" href="/manifest.webmanifest"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Simon AI"/>
+  <style>
+    :root{--bg:#070b16;--panel:rgba(255,255,255,.12);--edge:rgba(255,255,255,.24);--text:#eaf2ff;--muted:#a9b6d9;--acc:#6ae0ff;--acc2:#5b7dff;--ok:#44d18a;--warn:#ffcc4d;--danger:#ff6b6b}
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Inter,Segoe UI,Roboto;background:radial-gradient(80% 60% at 50% 10%,#0b1022,#070b16 50%,#04060d 100%);color:var(--text)}
+    .wrap{min-height:100%;display:grid;grid-template-rows:auto 1fr auto}
+    header{position:sticky;top:0;z-index:10;backdrop-filter:saturate(1.1) blur(6px);background:linear-gradient(to bottom,rgba(7,11,22,.95),rgba(7,11,22,.80));border-bottom:1px solid var(--edge)}
+    .inner{max-width:960px;margin:0 auto;padding:14px 16px}
+    h1{margin:0;font-size:18px;letter-spacing:.4px;font-weight:600}
+    .sub{font-size:13px;color:var(--muted)}
+    .energy{display:flex;align-items:center;gap:10px;margin-top:10px}
+    .bar{flex:1;height:10px;border-radius:999px;background:linear-gradient(90deg,rgba(255,255,255,.10),rgba(255,255,255,.04));border:1px solid var(--edge);overflow:hidden}
+    .fill{height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .25s ease}
+    .spark{height:100%;width:0;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.7),rgba(255,255,255,0));filter:blur(2px)}
+    .stat{font-size:12px;color:var(--muted)}
+    main{max-width:960px;margin:0 auto;padding:16px}
+    .panel{background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.10));border:1px solid var(--edge);border-radius:16px;padding:14px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .chip{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid var(--edge);background:var(--panel)}
+    .chip.bad{border-color:var(--danger);color:#ffc1c1}
+    .status{display:flex;gap:8px;align-items:center}
+    .dot{width:10px;height:10px;border-radius:50%;background:var(--danger);box-shadow:0 0 0 0 rgba(106,224,255,0)}
+    .status span{font-size:12px;color:var(--muted)}
+    .log{margin-top:12px;max-height:48vh;overflow:auto;padding-right:6px}
+    .msg{display:flex;gap:10px;margin:10px 0}
+    .a,.u{width:28px;height:28px;display:grid;place-items:center;border-radius:50%;border:1px solid var(--edge)}
+    .a{background:rgba(106,224,255,.15)} .u{background:rgba(255,255,255,.1)}
+    .bubble{flex:1;padding:10px 12px;border-radius:12px;border:1px solid var(--edge);background:rgba(255,255,255,.06);font-size:14px;line-height:1.35;white-space:pre-wrap}
+    .msg .x{margin-left:auto;font-size:14px;line-height:1;padding:0 6px;border-radius:6px;border:1px solid var(--edge);background:rgba(255,255,255,.10);color:var(--muted);cursor:pointer}
+    .msg .x:hover{color:var(--text)}
+    .controls{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+    button{appearance:none;border:none;color:var(--text);background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));border:1px solid var(--edge);padding:10px 12px;border-radius:12px;cursor:pointer}
+    button:active{transform:translateY(1px)} .danger{border-color:var(--danger)} .muted{opacity:.7}
+    .io{display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap}
+    .io input[type=text]{flex:1;min-width:220px;padding:10px 12px;border-radius:10px;border:1px solid var(--edge);background:rgba(255,255,255,.08);color:var(--text);font-size:14px}
+    .tests{display:none}
+    .hint{font-size:12px;color:var(--muted);margin-top:8px}
+    footer{padding:16px;text-align:center;color:var(--muted);font-size:12px}
+    @keyframes pulseGlow{0%{box-shadow:0 0 18px rgba(106,224,255,.25) inset}50%{box-shadow:0 0 34px rgba(106,224,255,.5) inset}100%{box-shadow:0 0 18px rgba(106,224,255,.25) inset}}
+    body.talking .panel{animation:pulseGlow 1s ease-in-out infinite}
+    body.talking header{box-shadow:0 0 24px rgba(106,224,255,.35)} body.talking .fill{filter:drop-shadow(0 0 10px rgba(106,224,255,.8))}
+    a{color:var(--acc)}
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:50}
+    .modal.on{display:flex}
+    .sheet{width:min(720px,92vw);max-height:88vh;overflow:auto;background:linear-gradient(180deg,rgba(13,19,38,.96),rgba(13,19,38,.92));border:1px solid var(--edge);border-radius:16px;padding:16px}
+    .sheet h2{margin:0 0 10px 0;font-size:16px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .grid label{font-size:12px;color:var(--muted)}
+    .grid input,.grid select,.grid textarea{width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--edge);background:rgba(255,255,255,.10);color:var(--text)}
+    .grid textarea{min-height:96px;resize:vertical}
+    .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
+    .xbtn{appearance:none;border:1px solid var(--edge);background:rgba(255,255,255,.10);color:var(--text);border-radius:8px;padding:4px 8px;cursor:pointer}
+    .cc{position:fixed;left:50%;bottom:82px;transform:translateX(-50%);max-width:min(92vw,820px);padding:10px 14px;border-radius:12px;border:1px solid var(--edge);background:rgba(0,0,0,.65);backdrop-filter:blur(8px);font-size:14px;line-height:1.35;display:none;z-index:40}
+    .cc.on{display:block}
+    @media (prefers-reduced-motion: reduce){
+      *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="inner">
+      <h1>SIMON • Hands-Free Voice Chat</h1>
+      <div class="sub">Speak naturally. Simon talks back. Today’s conversation is remembered locally on this device.</div>
+      <div class="energy" aria-label="Energy bar shows Simon’s speaking + daily memory fill">
+        <div class="bar"><div class="fill" id="energyFill"></div><div class="spark" id="spark"></div></div>
+        <div class="stat"><span id="dailyCount">0</span> replies today</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="panel" role="region" aria-label="Simon chat panel">
+      <div class="row" style="justify-content:space-between">
+        <div class="status"><div class="dot" id="micDot"></div><span id="micText">Mic idle</span></div>
+        <div class="row">
+          <span class="chip" id="wakeChip">Wake-word: <b>“Hey Simon”</b></span>
+          <span class="chip" id="persistChip">Memory: Today</span>
+          <span class="chip" id="profileChip">Profile: Default</span>
+          <span class="chip" id="toneChip">Tone: Smart-ass • Short • Funny</span>
+          <span class="chip" id="focusChip" title="Topic focus" style="display:none"></span>
+          <span class="chip" id="backendChip">Backend: <b>Unknown</b></span>
+          <span class="chip meter" id="tokenChip" title="Estimated tokens today">~0 tok • cap 20k</span>
+          <span class="chip" id="ccChip" title="Toggle captions">CC: Off</span>
+        </div>
+      </div>
+
+      <div class="log" id="log" aria-live="polite" role="log"></div>
+
+      <div class="controls" role="group" aria-label="Controls">
+        <button id="enableBtn">Enable Mic</button>
+        <button id="pttBtn" title="Hold to talk">🎙️ Hold to Talk</button>
+        <button id="micToggleBtn" title="Toggle microphone on/off">🎚️ Mic: On</button>
+        <button id="voiceToggleBtn" title="Toggle voice on/off">🔊 Voice: On</button>
+        <button id="settingsBtn" title="Voice & API settings">Settings</button>
+        <button id="clearBtn" title="Clear today’s local memory">Reset Today</button>
+        <button id="exportBtn" title="Download today’s transcript as .json">Export</button>
+        <button id="runTestsBtn" style="display:none">Run Self-Tests</button>
+      </div>
+
+      <div class="io">
+        <input id="textInput" type="text" placeholder="Type instead… (Enter to send)" aria-label="Type message to Simon" spellcheck="false" autocapitalize="off" autocomplete="off"/>
+        <button id="sendBtn" title="Send typed message">Send</button>
+      </div>
+
+      <!-- Settings Modal -->
+      <div class="modal" id="settingsModal" aria-hidden="true" aria-label="Settings modal">
+        <div class="sheet">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <h2>Simon Settings</h2>
+            <button class="xbtn" id="closeSettings">Close</button>
+          </div>
+          <div class="grid">
+            <!-- Behavior & Prompting -->
+            <div>
+              <label for="profileSelect">Behavior Profile</label>
+              <select id="profileSelect">
+                <option>Default</option><option>Friendly</option><option>Coach</option><option>Supportive Listener</option>
+                <option>Formal</option><option>Tech Support</option><option>Storyteller</option><option>Sales</option><option>Topic-Focused</option><option>Custom</option>
+              </select>
+            </div>
+            <div>
+              <label for="toneSelect">Tone Style</label>
+              <select id="toneSelect">
+                <option>Smart-ass • Short • Funny</option><option>Warm • Friendly • Encouraging</option><option>Direct • No-nonsense</option><option>Formal • Polite</option><option>Playful • Story-rich</option>
+              </select>
+            </div>
+            <div><label for="topicFocusInput">Topic Focus (optional)</label><input id="topicFocusInput" type="text" placeholder="fitness, real estate, travel planning, …"/></div>
+            <div><label for="maxLenInput">Max Response Length (tokens)</label><input id="maxLenInput" type="number" min="80" max="1200" step="20"/></div>
+            <div><label for="callMeInput">How to address you</label><input id="callMeInput" type="text" placeholder="boss, Captain, …"/></div>
+            <div><label for="swearSelect">Swear Filter</label><select id="swearSelect"><option value="allow">Allow mild swears</option><option value="bleep">Bleep/avoid swears</option></select></div>
+            <div style="grid-column:1 / -1"><label for="customSystem">Custom System Prompt (overrides profile)</label><textarea id="customSystem" placeholder="Write exact instructions for how Simon should act."></textarea></div>
+
+            <!-- Voice & API -->
+            <div><label for="voiceSelect">Voice</label><select id="voiceSelect"></select></div>
+            <div><label for="rateInput">Rate</label><input id="rateInput" type="range" min="0.7" max="1.3" step="0.05"/></div>
+            <div><label for="pitchInput">Pitch</label><input id="pitchInput" type="range" min="0.7" max="1.3" step="0.05"/></div>
+            <div><label for="voiceMode">Voice Mode</label>
+              <select id="voiceMode"><option value="browser-tts">Browser TTS</option><option value="openai-tts">OpenAI TTS</option></select>
+            </div>
+            <div><label for="openaiVoice">OpenAI Voice ID</label><input id="openaiVoice" type="text" placeholder="alloy, verse, coral"/></div>
+            <div><label for="apiKeyInput">OpenAI API Key (stored locally)</label><input id="apiKeyInput" type="password" placeholder="sk-..."/></div>
+            <div><label for="backendBaseInput">API Base URL (optional)</label><input id="backendBaseInput" type="text" placeholder="https://api.openai.com/v1"/></div>
+
+            <div style="grid-column:1 / -1">
+              <label>Recent Errors (local only)</label>
+              <div id="errorLogList" style="max-height:160px;overflow:auto;border:1px solid var(--edge);border-radius:10px;padding:8px;background:rgba(255,255,255,.04);font-size:12px"></div>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="xbtn" id="clearKey">Clear Key</button>
+            <button class="xbtn" id="clearErrors">Clear Errors</button>
+            <button class="xbtn" id="backendTestBtn">Run Backend Test</button>
+            <button class="xbtn" id="saveSettings">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tests" id="tests" aria-live="polite"></div>
+      <div class="hint">iOS/Safari requires a one-time tap (<em>Enable Mic</em>) to grant audio. After that, just say <b>“Hey Simon”</b> and speak. Or hold the mic button to talk.</div>
+    </div>
+  </main>
+
+  <footer><span class="muted">Simon Advanced AI • </span><a href="https://gaylordsinclair.com" target="_blank" rel="noopener">GaylordSinclair.com</a></footer>
+</div>
+
+<div class="cc" id="ccBox" aria-hidden="true"></div>
+
+<script>
+'use strict';
+(function(){
+  // === Config ===
+  const SIMON_NAME = 'Simon';
+  const WAKE_WORDS = ['hey simon','ok simon','simon'];
+  const DAILY_TARGET = 40;
+  const DAILY_TOKEN_CAP = 20000;
+  const DEFAULT_SAMEDOMAIN_ENDPOINT = '/api/simon';
+  const DEFAULT_SAMEDOMAIN_HEALTH = '/api/health';
+
+  // === Utils ===
+  const $ = (id)=>document.getElementById(id);
+  const delay = (ms)=>new Promise(r=>setTimeout(r,ms));
+  const todayKey = ()=>{
+    const d=new Date(), p=n=>String(n).padStart(2,'0');
+    return `simonLog-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  };
+  const TOKKEY = ()=> 'simonTokens-'+todayKey();
+
+  // Retry + timeout wrappers
+  async function withTimeout(run, ms=20000, reason='timeout'){
+    const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(reason), ms);
+    try { return await run(ctl.signal); } finally { clearTimeout(t); }
+  }
+  async function fetchRetry(url, opts={}, tries=3){
+    let lastErr;
+    for (let i=0;i<tries;i++){
+      try{ const r=await fetch(url,opts); if(r.ok) return r; lastErr=new Error('HTTP '+r.status); }
+      catch(e){ lastErr=e; }
+      await delay(300*(i+1) + Math.random()*250);
+    }
+    throw lastErr;
+  }
+
+  // === State ===
+  let lastKey = todayKey();
+  function ensureToday(){
+    const k = todayKey();
+    if(k !== lastKey){
+      lastKey = k; localStorage.removeItem(TOKKEY());
+      log = []; replies = 0; tokenCount=0;
+      $('tokenChip').textContent = `~0 tok • cap ${DAILY_TOKEN_CAP.toLocaleString()}`;
+      $('log').innerHTML=''; append('assistant',`New day. Hi, I am ${SIMON_NAME}. Say "Hey Simon" to begin.`); updateEnergy();
+    }
+  }
+
+  let voiceOn = (localStorage.getItem('simonVoiceOn') ?? '1') === '1';
+  let micOn   = (localStorage.getItem('simonMicOn')  ?? '1') === '1';
+  let squelchUntil = 0;
+  let speaking = false;
+  let recognizing = false;
+  let currentTurnId = 0;
+  let currentAbort = null;
+  let audioCtx=null, speakSeq=0, currentAudio=null, currentBlobURL=null;
+
+  // Errors
+  const ERRK='simonErrors';
+  const loadErrs=()=>{ try{return JSON.parse(localStorage.getItem(ERRK)||'[]')}catch{return []} };
+  const saveErrs=(a)=>{ try{localStorage.setItem(ERRK,JSON.stringify(a.slice(-100)))}catch{} };
+  function logErr(where,msg){ const a=loadErrs(); a.push({ts:Date.now(),where,message:String(msg||'')}); saveErrs(a); $('settingsBtn').classList.add('danger'); renderErrs(); }
+  function renderErrs(){
+    const list=$('errorLogList'); if(!list) return;
+    const a=loadErrs().slice().reverse();
+    list.innerHTML = a.length ? a.map(e=>`<div style="padding:6px 4px;border-bottom:1px solid var(--edge)"><b>${new Date(e.ts).toLocaleString()}</b> — <i>${e.where}</i><br/>${String(e.message).replace(/</g,'&lt;')}</div>`).join('') : '<em>No errors logged.</em>';
+    if(!a.length) $('settingsBtn').classList.remove('danger');
+  }
+
+  // Persistence
+  let log = ( ()=>{try{return JSON.parse(localStorage.getItem(todayKey())||'[]')}catch{return []}} )();
+  function saveLog(){ try{localStorage.setItem(todayKey(),JSON.stringify(log))}catch{} }
+
+  // Tokens/day stats
+  let replies = log.filter(m=>m.role==='assistant').length;
+  let tokenCount = Number(localStorage.getItem(TOKKEY())||'0')||0;
+  function estTok(t){ return Math.max(1, Math.round((t||'').length/4)); }
+  function addTokens(n){
+    tokenCount = Math.max(0,(Number(localStorage.getItem(TOKKEY())||'0')||0)+(n||0));
+    localStorage.setItem(TOKKEY(), String(tokenCount));
+    $('tokenChip').textContent = `~${tokenCount.toLocaleString()} tok • cap ${DAILY_TOKEN_CAP.toLocaleString()}`;
+    $('tokenChip').classList.toggle('bad', tokenCount>DAILY_TOKEN_CAP);
+  }
+
+  // DOM refs
+  const micDot=$('micDot'), micText=$('micText'), energyFill=$('energyFill'), spark=$('spark'), dailyCount=$('dailyCount');
+  const backendChip=$('backendChip'), wakeChip=$('wakeChip'), ccBox=$('ccBox');
+  const textInput=$('textInput');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec=null, stream=null, mediaRec=null, sttActive=false;
+
+  // UI helpers
+  function append(role,text,ts){
+    const row=document.createElement('div'); row.className='msg'; if(ts) row.dataset.ts=String(ts);
+    const icon=document.createElement('div'); icon.className=role==='assistant'?'a':'u'; icon.textContent=role==='assistant'?'⚡':'🗣️';
+    const bubble=document.createElement('div'); bubble.className='bubble'; bubble.textContent=text;
+    const del=document.createElement('button'); del.className='x'; del.title='Remove from history'; del.textContent='×';
+    del.onclick=()=>{ const tsv=row.dataset.ts?Number(row.dataset.ts):0; const i=log.findIndex(m=>m.ts===tsv); if(i>-1){ const rem=log.splice(i,1)[0]; if(rem?.role==='assistant') { replies=Math.max(0,replies-1); updateEnergy(); } saveLog(); } row.remove(); };
+    row.append(icon,bubble,del); $('log').appendChild(row); $('log').scrollTop=$('log').scrollHeight; return bubble;
+  }
+  function setMic(on){
+    micDot.style.background=on?'var(--ok)':'var(--danger)';
+    micDot.style.boxShadow=on?'0 0 8px 2px rgba(106,224,255,.6)':'0 0 0 0 transparent';
+    micText.textContent = on ? 'Listening… (say "Hey Simon")' : 'Mic idle';
+  }
+  function updateEnergy(){ dailyCount.textContent=String(replies); energyFill.style.width=Math.min(100,Math.round((replies/DAILY_TARGET)*100))+'%'; }
+  function isWake(t){ const s=' '+String(t||'').toLowerCase().trim()+' '; return WAKE_WORDS.some(w=>s.includes(' '+w+' ')); }
+
+  // Audio/TTS
+  async function unlockAudio(){ try{ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended') await audioCtx.resume(); }catch{} }
+  async function stopAudio(){ try{ speechSynthesis?.cancel?.() }catch{}; try{ if(currentAudio){ currentAudio.pause(); currentAudio.src=''; currentAudio=null; } }catch{}; if(currentBlobURL){ URL.revokeObjectURL(currentBlobURL); currentBlobURL=null; } }
+  function setSpeaking(on){
+    speaking=on; document.body.classList.toggle('talking', !!on);
+    if(on){ squelchUntil=performance.now()+900; stopAllListening(); spark.style.width='20%'; spark.animate([{transform:'translateX(-20%)'},{transform:'translateX(120%)'}],{duration:900,iterations:Infinity}); }
+    else { spark.getAnimations().forEach(a=>a.cancel()); spark.style.width='0%'; const wait=Math.max(0,squelchUntil-performance.now()); setTimeout(()=>{ if(micOn) autoRestart(); }, wait+50); }
+  }
+  function showCC(t){ const chip=$('ccChip'); if(!chip) return; const on=chip.textContent?.includes('On'); if(on){ ccBox.textContent=t; ccBox.classList.add('on'); } }
+  function setMedia(text, audioEl){
+    if(!('mediaSession'in navigator)) return;
+    navigator.mediaSession.metadata=new MediaMetadata({title:'Simon is speaking',artist:'SIMON AI',album:'GaylordSinclair.com'});
+    navigator.mediaSession.setActionHandler('pause',()=>{audioEl?audioEl.pause():speechSynthesis.pause()});
+    navigator.mediaSession.setActionHandler('play', ()=>{audioEl?audioEl.play().catch(()=>{}):speechSynthesis.resume()});
+  }
+
+  function populateVoices(){
+    const sel=$('voiceSelect'); if(!sel) return;
+    const vs=speechSynthesis.getVoices()||[]; const focused=document.activeElement===sel;
+    if(focused) return; // don't steal focus while typing
+    sel.innerHTML=''; vs.forEach(v=>{ const opt=document.createElement('option'); opt.value=v.voiceURI; opt.textContent=`${v.name} (${v.lang})`; if(settings.voiceURI===v.voiceURI) opt.selected=true; sel.appendChild(opt); });
+  }
+  function pickVoice(){
+    const vs=speechSynthesis.getVoices()||[];
+    if(settings.voiceURI){ const v=vs.find(v=>v.voiceURI===settings.voiceURI); if(v) return v; }
+    return vs.find(v=>/Samantha|Siri|Zosia|Anna/i.test(v.name)) || vs.find(v=>/en/i.test(v.lang)) || vs[0] || null;
+  }
+
+  async function speak(text){
+    const ticket=++speakSeq; await unlockAudio(); await stopAudio();
+    if(!voiceOn){ showCC(text); return; }
+    if(settings.voiceMode==='openai-tts'){ return speakOpenAI(text, ticket); }
+    return speakBrowser(text, ticket);
+  }
+  function speakBrowser(text, ticket){
+    return new Promise((resolve)=>{
+      if(!('speechSynthesis'in window)){ append('assistant','[Info] speechSynthesis not supported'); return resolve(); }
+      const u=new SpeechSynthesisUtterance(text); const v=pickVoice(); if(v) u.voice=v;
+      u.rate=Number(settings.rate||1); u.pitch=Number(settings.pitch||1); u.volume=1;
+      u.onstart=()=>{ if(ticket!==speakSeq){ try{speechSynthesis.cancel()}catch{} return; } setSpeaking(true); showCC(text); setMedia(text); };
+      u.onend=()=>{ if(ticket===speakSeq) setSpeaking(false); resolve(); };
+      // small WebKit nudge
+      setTimeout(()=>{ try{ speechSynthesis.cancel(); }catch{} speechSynthesis.speak(u); }, 0);
+    });
+  }
+  function isOpenAIBase(origin){ return /api\.openai\.com$/i.test(origin); }
+  async function speakOpenAI(text, ticket){
+    try{
+      const base = normalizeBase(settings.backendBase||''); if(!base){ append('assistant','[Info] Set API Base URL in Settings to use OpenAI TTS.'); return; }
+      const url = isOpenAIBase(base) ? (base+'/v1/audio/speech') : (base+'/audio/speech');
+      const headers={'Content-Type':'application/json'}; if(isOpenAIBase(base) && settings.apiKey) headers.Authorization='Bearer '+settings.apiKey;
+      const body=JSON.stringify({model:'tts-1-hd', voice:(settings.openaiVoice||'alloy'), input:text});
+      const res = await withTimeout(sig=>fetchRetry(url,{method:'POST',headers,body,signal:sig}), 20000);
+      const buf = await res.arrayBuffer(); if(ticket!==speakSeq) return;
+      currentBlobURL = URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}));
+      const audio=new Audio(currentBlobURL); currentAudio=audio; setSpeaking(true); showCC(text); setMedia(text,audio);
+      await audio.play().catch(e=>logErr('tts','playback '+String(e)));
+      audio.onended=()=>{ if(ticket===speakSeq) setSpeaking(false); if(currentAudio===audio) currentAudio=null; if(currentBlobURL){ URL.revokeObjectURL(currentBlobURL); currentBlobURL=null; } };
+    }catch(e){ logErr('tts', e?.message||String(e)); }
+  }
+
+  // Mic / SR
+  function stopAllListening(){ try{rec&&recognizing&&rec.stop()}catch{}; recognizing=false; stopStreaming(); setMic(false); }
+  function autoRestart(){
+    if(!micOn || speaking || performance.now()<squelchUntil) return;
+    if(rec){ setTimeout(()=>{ if(!micOn || speaking || performance.now()<squelchUntil) return; try{ !recognizing && rec.start(); }catch{} }, 350); }
+    else if(!sttActive){ startStreaming(); }
+  }
+  async function startMic(){
+    if(!micOn) return;
+    if(rec){ try{ rec.start(); }catch{} }
+    else { await startStreaming(); if(!sttActive) append('assistant','Hands-free needs mic access + HTTPS.'); }
+  }
+
+  if(SR){
+    rec = new SR(); rec.lang=navigator.language||'en-US'; rec.continuous=true; rec.interimResults=true;
+    rec.onstart=()=>{ recognizing=true; setMic(true); };
+    rec.onerror=(e)=>{ recognizing=false; setMic(false); autoRestart(); };
+    rec.onend=()=>{ recognizing=false; setMic(false); autoRestart(); };
+    rec.onresult=(ev)=>{
+      if(!micOn || speaking || performance.now()<squelchUntil) return;
+      let final=''; for(let i=ev.resultIndex;i<ev.results.length;i++){ const r=ev.results[i]; const t=r[0].transcript; if(r.isFinal) final+=t; }
+      if(final) handleHeard(final.trim());
+    };
+  }
+  async function startStreaming(){
+    if(sttActive || !micOn) return;
+    if(!navigator.mediaDevices?.getUserMedia){ append('assistant','This browser cannot access the mic. Use HTTPS + modern browser.'); return; }
+    try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}); }
+    catch{ append('assistant','Mic permission denied. On iPhone: Settings → Safari → Microphone → Allow. Reload.'); return; }
+    setMic(true); sttActive=true; wakeChip.textContent='Wake-word: server STT';
+    try{ mediaRec=new MediaRecorder(stream,{mimeType:'audio/webm'}); }catch{ append('assistant','MediaRecorder unsupported.'); return; }
+    mediaRec.ondataavailable=async e=>{
+      if(!micOn || speaking || performance.now()<squelchUntil || !e.data?.size) return;
+      try{
+        const form=new FormData(); form.append('audio',e.data,'chunk.webm');
+        const r=await withTimeout(sig=>fetchRetry(buildURL('/api/stt'),{method:'POST',body:form,signal:sig}), 20000);
+        const j=await r.json(); if(j?.text) handleHeard(String(j.text));
+      }catch(err){ logErr('stt','chunk '+(err?.message||String(err))); }
+    };
+    mediaRec.onstop=()=>{ setMic(false); sttActive=false; };
+    try{ mediaRec.start(2000); }catch{ append('assistant','Recording failed to start. Keep the tab active or add to Home Screen.'); }
+  }
+  function stopStreaming(){ try{mediaRec&&mediaRec.state!=='inactive'&&mediaRec.stop()}catch{}; try{stream&&stream.getTracks().forEach(t=>t.stop())}catch{}; sttActive=false; setMic(false); }
+
+  // Settings
+  function loadSettings(){ try{return JSON.parse(localStorage.getItem('simonSettings')||'{}')}catch{return{}} }
+  function saveSettingsObj(o){ try{localStorage.setItem('simonSettings',JSON.stringify(o||{}))}catch{} }
+  function profileTone(p){
+    return ({
+      'default':'Smart-ass • Short • Funny','friendly':'Warm • Friendly • Encouraging','coach':'Direct • No-nonsense','supportive listener':'Warm • Friendly • Encouraging',
+      'formal':'Formal • Polite','tech support':'Direct • No-nonsense','storyteller':'Playful • Story-rich','sales':'Direct • No-nonsense','topic-focused':'Direct • No-nonsense','custom':settings.tone||'Direct • No-nonsense'
+    })[(p||'').toLowerCase()] || 'Smart-ass • Short • Funny';
+  }
+  function toneKey(t){
+    t=(t||'').toLowerCase(); if(t.includes('smart'))return'short-smartass-funny'; if(t.includes('warm'))return'warm-friendly';
+    if(t.includes('no-nonsense')||t.includes('direct'))return'direct-no-nonsense'; if(t.includes('formal'))return'formal-polite'; if(t.includes('story'))return'playful-story-rich'; return'direct-no-nonsense';
+  }
+  function normalizeBase(s){
+    if(!s) return '';
+    try{ return new URL(String(s).trim()).origin }catch{ const b=String(s).trim().replace(/\/$/,''); const m=b.match(/^(https?:\/\/[^/]+)/i); return m?m[1]:'' }
+  }
+  function buildURL(p){ const base=normalizeBase(settings.backendBase||''); return base?(base+p):p }
+
+  let settings = Object.assign({rate:1,pitch:1,voiceURI:null,apiKey:'',backendBase:'https://api.openai.com/v1',voiceMode:'browser-tts',openaiVoice:'alloy',profile:'Default',tone:'Smart-ass • Short • Funny',topicFocus:'',maxLen:300,callMe:'',swear:'allow',customSystem:''}, loadSettings());
+
+  function buildSystem(){
+    if((settings.customSystem||'').trim()) return settings.customSystem.trim();
+    const parts=['You are Simon, a voice assistant. Be helpful and concise.'];
+    const eff=settings.tone||profileTone(settings.profile); if(eff) parts.push('Tone: '+eff+'.');
+    const profTxt={
+      'default':'General helpful assistant.','friendly':'Be warm, upbeat, encouraging.','coach':'Be motivating and actionable.','supportive listener':'Listen first; reflect feelings; ask gentle follow-ups.','formal':'Use professional, polite language.','tech support':'Diagnose step-by-step; ask clarifying questions.','storyteller':'Imaginative, brief vivid images.','sales':'Identify needs; suggest succinctly with clear CTAs.','topic-focused':'Keep replies tightly scoped.','custom':''
+    }[(settings.profile||'Default').toLowerCase()];
+    if(profTxt) parts.push(profTxt);
+    if((settings.topicFocus||'').trim()) parts.push('Primary focus: '+settings.topicFocus.trim()+'.');
+    if((settings.callMe||'').trim()) parts.push("Address the user as '"+settings.callMe.trim()+"'.");
+    if(settings.swear==='bleep') parts.push('Avoid profanity. Use clean substitutes.');
+    return parts.join('\n');
+  }
+
+  function updateProfileUI(){
+    $('profileChip').textContent='Profile: '+(settings.profile||'Default');
+    $('toneChip').textContent='Tone: '+(settings.tone||profileTone(settings.profile));
+    const tf=(settings.topicFocus||'').trim();
+    const focus=$('focusChip'); focus.textContent=tf?('Focus: '+tf):''; focus.style.display=tf?'inline-block':'none';
+  }
+
+  // Backend health + model chip
+  async function checkBackend(){
+    const base=normalizeBase(settings.backendBase||''); if(!base){ backendChip.innerHTML='Backend: <b style="color:var(--danger)">Error</b>'; return false; }
+    const isOpenAI=/api\.openai\.com$/i.test(base); const url=isOpenAI?(base+'/v1/models'):buildURL(DEFAULT_SAMEDOMAIN_HEALTH);
+    try{
+      const headers={}; if(isOpenAI&&settings.apiKey) headers.Authorization='Bearer '+settings.apiKey;
+      const res=await withTimeout(sig=>fetchRetry(url,{method:'GET',headers,signal:sig}), 10000);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      backendChip.innerHTML=`Backend: <b style="color:var(--ok)">OK</b> • Model: gpt-4o-mini`;
+      return true;
+    }catch(e){
+      backendChip.innerHTML='Backend: <b style="color:var(--danger)">Error</b>';
+      logErr('health', e?.message||String(e)); append('assistant',`[Info] Backend check failed at ${url}.`);
+      return false;
+    }
+  }
+
+  // Natural language quick switches
+  function tryModeCommands(text){
+    const t=text.toLowerCase();
+    const profiles=['friendly','coach','supportive listener','formal','tech support','storyteller','sales','topic-focused','default','custom'];
+    for(const p of profiles){
+      if(t.includes('switch to '+p) || t.includes('be '+p)){
+        settings.profile=p.replace(/\b\w/g,c=>c.toUpperCase()); settings.tone=profileTone(settings.profile); saveSettingsObj(settings); updateProfileUI();
+        append('assistant',`[Mode] Profile → ${settings.profile} • Tone → ${settings.tone}`); return true;
+      }
+    }
+    if(/be (funny|playful|serious|formal)/.test(t)){
+      const m=t.match(/be (funny|playful|serious|formal)/); const map={funny:'Smart-ass • Short • Funny',playful:'Playful • Story-rich',serious:'Direct • No-nonsense',formal:'Formal • Polite'};
+      settings.tone=map[m[1]]||settings.tone; saveSettingsObj(settings); updateProfileUI(); append('assistant',`[Mode] Tone → ${settings.tone}`); return true;
+    }
+    const fm=t.match(/focus on (.+)$/); if(fm){ settings.topicFocus=fm[1].trim(); saveSettingsObj(settings); updateProfileUI(); append('assistant',`[Mode] Focus → ${settings.topicFocus}`); return true; }
+    if(t.includes('clear focus')){ settings.topicFocus=''; saveSettingsObj(settings); updateProfileUI(); append('assistant','[Mode] Focus cleared'); return true; }
+    const cm=t.match(/call me ([a-z0-9 _\-\.]+)/); if(cm){ settings.callMe=cm[1].trim(); saveSettingsObj(settings); updateProfileUI(); append('assistant',`[Mode] I will call you “${settings.callMe}”.`); return true; }
+    if(t.includes('no swearing')||t.includes('family friendly')){ settings.swear='bleep'; saveSettingsObj(settings); append('assistant','[Mode] Swear filter on'); return true; }
+    if(t.includes('swearing ok')||t.includes('uncensored')){ settings.swear='allow'; saveSettingsObj(settings); append('assistant','[Mode] Swear filter off'); return true; }
+    return false;
+  }
+
+  // Ask (abortable + streaming)
+  let currentStreamBubble=null;
+  function streamAppend(delta, turnId){ if(turnId!==currentTurnId) return; if(!currentStreamBubble) return; currentStreamBubble.textContent += delta; showCC(currentStreamBubble.textContent); }
+
+  async function ask(prompt, {stream=false, turnId}={}){
+    try{ currentAbort?.abort(); }catch{} currentAbort=new AbortController();
+    const { signal } = currentAbort;
+    const base=normalizeBase(settings.backendBase||''); const isOpenAI=/api\.openai\.com$/i.test(base);
+    const sys=buildSystem();
+
+    if(isOpenAI){
+      if(!settings.apiKey){ throw new Error('Missing API key for OpenAI.'); }
+      const url = base+'/v1/chat/completions';
+      const headers={'Content-Type':'application/json','Authorization':'Bearer '+settings.apiKey};
+      const messages=[{role:'system',content:sys}, ...log.slice(-10).map(m=>({role:m.role==='assistant'?'assistant':'user',content:m.content||''})), {role:'user',content:String(prompt||'')}];
+      const payload={model:'gpt-4o-mini',temperature:0.6,max_tokens:Number(settings.maxLen||300),messages};
+
+      if(stream){
+        const res = await withTimeout(sig=>fetchRetry(url,{method:'POST',headers,body:JSON.stringify({...payload,stream:true}),signal:sig}), 25000);
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const reader=res.body.getReader(); const dec=new TextDecoder(); let full='';
+        while(true){
+          const {done,value}=await reader.read(); if(done) break;
+          const chunk=dec.decode(value,{stream:true});
+          for(const line of chunk.split(/\r?\n/)){
+            const m=line.trim(); if(!m.startsWith('data:')) continue;
+            const data=m.slice(5).trim(); if(!data || data==='[DONE]') continue;
+            try{ const j=JSON.parse(data); const delta=j?.choices?.[0]?.delta?.content||''; if(delta){ full+=delta; streamAppend(delta,turnId); } }catch{ /* partial JSON */ }
+          }
+        }
+        return full || '…';
+      } else {
+        const res = await withTimeout(sig=>fetchRetry(url,{method:'POST',headers,body:JSON.stringify(payload),signal:sig}), 25000);
+        const txt = await res.text(); if(!res.ok) throw new Error('HTTP '+res.status+': '+txt.slice(0,300));
+        const j=JSON.parse(txt); return String(j?.choices?.[0]?.message?.content || '…');
+      }
+    }
+
+    // Same-domain proxy fallback
+    const endpoint=buildURL(DEFAULT_SAMEDOMAIN_ENDPOINT);
+    try{
+      const headers={'Content-Type':'application/json'}; if(settings.apiKey) headers['X-OpenAI-Key']=settings.apiKey;
+      const payload={model:'simon-gpt',style:toneKey(settings.tone||profileTone(settings.profile)),system:sys,max_tokens:Number(settings.maxLen||300),messages:log.concat({role:'user',content:prompt}).slice(-20),meta:{profile:settings.profile,tone:settings.tone}};
+      const res = await withTimeout(sig=>fetchRetry(endpoint,{method:'POST',headers,body:JSON.stringify(payload),signal:sig}), 25000);
+      const data=await res.json(); if(data?.reply) return String(data.reply);
+      throw new Error('Malformed response');
+    }catch(e){
+      logErr('ask','Proxy failed: '+(e?.message||String(e)));
+      return fallbackReply(prompt);
+    }
+  }
+
+  function fallbackReply(p){ const t=String(p||'').trim(); if(!t) return "I'm here. What do you need?"; if(/time|date/i.test(t)) return new Date().toLocaleString(); return 'Hot take: '+t.slice(0,120)+(t.length>120?'…':'')+' — let’s retry when the API’s back.'; }
+
+  // Turn handling
+  function cancelTurn(){ try{currentAbort?.abort()}catch{}; currentAbort=null; stopAudio(); currentTurnId++; setSpeaking(false); }
+  async function handleHeard(raw){
+    if(!micOn || speaking || performance.now()<squelchUntil) return;
+    ensureToday();
+    const text=String(raw||'').trim(); if(!text) return;
+    if(tryModeCommands(text)) return;
+
+    cancelTurn(); const myTurn=++currentTurnId;
+
+    // Wake-word trim
+    let content=text;
+    if(isWake(text)){ for(const w of WAKE_WORDS){ const s=content.toLowerCase(); if(s.startsWith(w)) content=content.slice(w.length).trim(); } }
+
+    const uTs=Date.now(); log.push({role:'user',content:content||text,ts:uTs}); saveLog(); append('user', content||text, uTs); addTokens(estTok(content||text));
+    const aTs=Date.now(); const bubble=append('assistant','…',aTs); currentStreamBubble=bubble; replies++; updateEnergy();
+
+    const final=await ask(content||text,{stream:true,turnId:myTurn});
+    if(myTurn!==currentTurnId) return;
+    if(bubble.textContent.trim()==='…') bubble.textContent=final;
+    log.push({role:'assistant',content:bubble.textContent,ts:aTs}); saveLog(); addTokens(estTok(bubble.textContent));
+    await speak(bubble.textContent);
+    if(myTurn!==currentTurnId) return; currentStreamBubble=null;
+  }
+
+  // Controls
+  $('enableBtn').addEventListener('click', async ()=>{ await unlockAudio(); startMic(); });
+  $('pttBtn').addEventListener('pointerdown', async ()=>{ await unlockAudio(); startMic(); });
+  $('pttBtn').addEventListener('pointerup', ()=>{ stopAllListening(); });
+  $('sendBtn').addEventListener('click', ()=>{ const v=textInput.value.trim(); if(!v) return; handleHeard('hey simon '+v); textInput.value=''; });
+  textInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); const v=textInput.value.trim(); if(v) handleHeard('hey simon '+v); textInput.value=''; } });
+
+  $('voiceToggleBtn').addEventListener('click', ()=>{
+    voiceOn=!voiceOn; localStorage.setItem('simonVoiceOn',voiceOn?'1':'0');
+    $('voiceToggleBtn').textContent = voiceOn ? '🔊 Voice: On' : '🔇 Voice: Off';
+    $('voiceToggleBtn').classList.toggle('muted', !voiceOn);
+    append('assistant','[Info] Voice '+(voiceOn?'enabled':'muted')+'.');
+    if(!voiceOn){ try{speechSynthesis?.cancel?.()}catch{} if(currentAudio){ try{currentAudio.pause()}catch{} currentAudio=null; } }
+  });
+  $('micToggleBtn').addEventListener('click', ()=>{
+    micOn=!micOn; localStorage.setItem('simonMicOn',micOn?'1':'0');
+    $('micToggleBtn').textContent = micOn ? '🎚️ Mic: On' : '🚫 Mic: Off';
+    $('micToggleBtn').classList.toggle('muted', !micOn);
+    if(!micOn){ stopAllListening(); cancelTurn(); append('assistant','[Info] Mic muted.'); } else { append('assistant','[Info] Mic unmuted. Say "Hey Simon".'); autoRestart(); }
+  });
+  $('ccChip').addEventListener('click', ()=>{ const on=$('ccChip').textContent.includes('On'); $('ccChip').textContent='CC: '+(on?'Off':'On'); if(on) $('ccBox').classList.remove('on'); });
+
+  // Settings modal
+  const openSettings=()=>{
+    $('settingsModal').classList.add('on');
+    populateVoices();
+    $('rateInput').value=String(settings.rate); $('pitchInput').value=String(settings.pitch);
+    $('apiKeyInput').value=String(settings.apiKey||''); $('backendBaseInput').value=normalizeBase(settings.backendBase||'https://api.openai.com/v1');
+    $('voiceMode').value=String(settings.voiceMode||'browser-tts'); $('openaiVoice').value=String(settings.openaiVoice||'alloy');
+    $('profileSelect').value=settings.profile||'Default'; $('toneSelect').value=(settings.tone||profileTone(settings.profile));
+    $('topicFocusInput').value=settings.topicFocus||''; $('maxLenInput').value=String(settings.maxLen||300); $('callMeInput').value=settings.callMe||'';
+    $('swearSelect').value=settings.swear||'allow'; $('customSystem').value=settings.customSystem||'';
+    renderErrs();
+  };
+  const closeSettings=()=>{ $('settingsModal').classList.remove('on'); };
+  $('settingsBtn').addEventListener('click', openSettings);
+  $('closeSettings').addEventListener('click', closeSettings);
+  $('saveSettings').addEventListener('click', ()=>{
+    const prev=settings.profile;
+    settings.rate=Number($('rateInput').value||1); settings.pitch=Number($('pitchInput').value||1); settings.voiceURI=$('voiceSelect').value||null;
+    settings.apiKey=$('apiKeyInput').value||''; settings.backendBase=$('backendBaseInput').value||'';
+    settings.voiceMode=$('voiceMode').value; settings.openaiVoice=$('openaiVoice').value||'alloy';
+    settings.profile=$('profileSelect').value; settings.tone=$('toneSelect').value; settings.topicFocus=$('topicFocusInput').value;
+    settings.maxLen=Number($('maxLenInput').value||300); settings.callMe=$('callMeInput').value; settings.swear=$('swearSelect').value; settings.customSystem=$('customSystem').value;
+    if(settings.profile!==prev){ settings.tone=profileTone(settings.profile); $('toneSelect').value=settings.tone; }
+    saveSettingsObj(settings); updateProfileUI(); append('assistant','[Info] Settings saved.'); closeSettings(); checkBackend();
+  });
+  $('clearKey').addEventListener('click', ()=>{ settings.apiKey=''; saveSettingsObj(settings); $('apiKeyInput').value=''; append('assistant','[Info] API key cleared from this device.'); });
+  $('clearErrors').addEventListener('click', ()=>{ saveErrs([]); renderErrs(); });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e)=>{
+    if(e.key==='Escape'){ closeSettings(); try{speechSynthesis?.cancel?.()}catch{} }
+    if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); textInput.focus(); }
+  });
+
+  // Self-tests (kept minimal)
+  function runTests(){
+    const tests=$('tests'); if(!tests) return; tests.innerHTML='<b>Self-Tests:</b>'; const ul=document.createElement('ul'); tests.appendChild(ul);
+    const add=(ok,msg)=>{ const li=document.createElement('li'); li.className=ok?'pass':'fail'; li.textContent=(ok?'✓ ':'✗ ')+msg; ul.appendChild(li); };
+    try{
+      const k=todayKey(); add(/^simonLog-\d{4}-\d{2}-\d{2}$/.test(k),'todayKey format');
+      const a=normalizeBase('https://example.com/x'); const b=normalizeBase('https://example.com/'); const c=normalizeBase('https://example.com'); add(a===b && b===c,'normalizeBase origin-only');
+      add(isWake('hey simon do it')===true && isWake('assignment')===false,'wake-word boundary');
+      add(typeof speak==='function','speak() present');
+      (async()=>{ const ok=await checkBackend(); add(!!ok,'backend health'); })();
+    }catch(e){ add(false,'tests crashed: '+(e?.message||e)); }
+  }
+  $('runTestsBtn')?.addEventListener('click', runTests);
+
+  // Init
+  log.forEach(m=>append(m.role,m.content,m.ts));
+  if(!log.length) append('assistant',`Hi, I am ${SIMON_NAME}. Say "Hey Simon" to begin.`);
+  updateEnergy();
+  $('tokenChip').textContent=`~${(Number(localStorage.getItem(TOKKEY())||'0')||0).toLocaleString()} tok • cap ${DAILY_TOKEN_CAP.toLocaleString()}`;
+  if('speechSynthesis'in window){ speechSynthesis.onvoiceschanged=()=>{ populateVoices(); }; }
+  if(!settings.tone){ settings.tone=profileTone(settings.profile); saveSettingsObj(settings); }
+  $('micToggleBtn').classList.toggle('muted',!micOn); $('micToggleBtn').textContent=micOn?'🎚️ Mic: On':'🚫 Mic: Off';
+  $('voiceToggleBtn').classList.toggle('muted',!voiceOn); $('voiceToggleBtn').textContent=voiceOn?'🔊 Voice: On':'🔇 Voice: Off';
+  updateProfileUI(); checkBackend();
+  if('serviceWorker'in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
+})();
+</script>
+</body>
+</html></body></html>
