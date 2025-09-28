@@ -1,1 +1,36 @@
-
+simonai/
+├─ README.md
+├─ LICENSE
+├─ CODE_OF_CONDUCT.md
+├─ CONTRIBUTING.md
+├─ SECURITY.md
+├─ .gitignore
+├─ .gitattributes
+├─ .editorconfig
+├─ .github/
+│  ├─ ISSUE_TEMPLATE/
+│  │  ├─ bug_report.md
+│  │  └─ feature_request.md
+│  ├─ PULL_REQUEST_TEMPLATE.md
+│  ├─ workflows/
+│  │  ├─ web-deploy.yml
+│  │  ├─ lint-web.yml
+│  │  └─ ios-lint.yml
+├─ web/                # Your public website / PWA
+│  ├─ index.html
+│  ├─ manifest.webmanifest
+│  ├─ sw.js
+│  ├─ assets/
+│  │  ├─ css/app.css
+│  │  ├─ js/app.js
+│  │  └─ img/logo.svg
+│  └─ docs/            # project docs rendered via Pages (optional)
+├─ ios/                # Xcode project (SwiftUI)
+│  ├─ SimonAI.xcodeproj/...
+│  └─ SimonAI/
+│     ├─ ContentView.swift
+│     ├─ SimonAIApp.swift
+│     └─ Info.plist
+└─ server/             # (optional) lightweight API proxy placeholder
+   ├─ README.md
+   └─ TODO.md
