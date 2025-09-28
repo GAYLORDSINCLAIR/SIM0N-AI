@@ -1,15 +1,9 @@
-# Welcome to GitHub Desktop!
-
-This is your README. READMEs are where you can communicate what your project is and how to use it.
-
-Write your name on line 6, save it, and then head back to GitHub Desktop.
-Gaylord Sinclair
 # SimonAI
 
 Hands-free, voice-first AI assistant + showcase web PWA and iOS app.
 
 ## Quick start
-
+Gaylord Sinclair
 ### Web (GitHub Pages)
 1) Put your site in `/web`.  
 2) Push to `main`.  
