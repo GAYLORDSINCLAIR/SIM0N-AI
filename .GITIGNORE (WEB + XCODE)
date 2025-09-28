@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Node / tooling (if you add later)
+node_modules/
+dist/
+.bundle/
+.env*
+*.log
+
+# Xcode
+xcuserdata/
+DerivedData/
+build/
+*.xcworkspace/xcuserdata
+*.xcuserstate
+
+# Swift Package Manager
+Packages/
+Package.pins
+.build/
