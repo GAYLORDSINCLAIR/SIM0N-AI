@@ -1,0 +1,20 @@
+# Contributing to SimonAI
+
+## Dev flow
+- Fork → branch → PR to `main`.
+- Use conventional commits (e.g., `feat:`, `fix:`, `docs:`).
+
+## Issues & PRs
+- Use templates.
+- Link to related issues.
+- Keep PRs small and focused.
+
+## Style
+- Web: Prettier default, ES modules.
+- iOS: Swift 5.9+, SwiftLint (in CI).
+
+## Local
+- `/web`: open `index.html` or run a simple static server.
+- `/ios`: open in Xcode; target iOS 17+.
+
+Thanks! 🚀
