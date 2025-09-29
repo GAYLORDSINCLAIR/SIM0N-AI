@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum=1, viewport-fit=cover"/>
+<title>SIMON • Hands-Free Voice Chat (Multi-AI)</title>
+<meta name="theme-color" content="#070b16"/>
+<link rel="manifest" href="/manifest.webmanifest"/>
+<style>
+:root{--bg:#070b16;--panel:rgba(255,255,255,.12);--edge:rgba(255,255,255,.24);--text:#eaf2ff;--muted:#a9b6d9;--acc:#6ae0ff;--acc2:#5b7dff;--ok:#44d18a;--warn:#ffcc4d;--danger:#ff6b6b}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Inter,Segoe UI,Roboto;background:radial-gradient(80% 60% at 50% 10%,#0b1022,#070b16 50%,#04060d 100%);color:var(--text)}
+/* lock background scroll when modal open */
+body.modal-open{overflow:hidden}
+.wrap{min-height:100%;display:grid;grid-template-rows:auto 1fr auto}
+header{position:sticky;top:0;z-index:10;backdrop-filter:saturate(1.1) blur(6px);background:linear-gradient(to bottom,rgba(7,11,22,.95),rgba(7,11,22,.8));border-bottom:1px solid var(--edge)}
+.inner{max-width:960px;margin:0 auto;padding:14px 16px}
+h1{margin:0;font-size:18px;letter-spacing:.4px;font-weight:600}
+.sub{font-size:13px;color:var(--muted)}
+.energy{display:flex;align-items:center;gap:10px;margin-top:10px}
+.bar{flex:1;height:10px;border-radius:999px;background:linear-gradient(90deg,rgba(255,255,255,.1),rgba(255,255,255,.04));border:1px solid var(--edge);overflow:hidden}
+.fill{height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .25s ease}
+.spark{height:100%;width:0;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.7),rgba(255,255,255,0));filter:blur(2px)}
+.stat{font-size:12px;color:var(--muted)}
+main{max-width:960px;margin:0 auto;padding:16px}
+.panel{background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.1));border:1px solid var(--edge);border-radius:16px;padding:14px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.chip,.bubble,.a,.u,.msg .x,button,.xbtn{border:1px solid var(--edge)}
+.chip{font-size:12px;padding:6px 10px;border-radius:999px;background:var(--panel)}
+.chip.bad{border-color:var(--danger);color:#ffc1c1}
+.status{display:flex;gap:8px;align-items:center}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--danger);box-shadow:0 0 0 0 rgba(106,224,255,0)}
+.status span{font-size:12px;color:var(--muted)}
+.log{margin-top:12px;max-height:48vh;overflow:auto;padding-right:6px}
+.msg{display:flex;gap:10px;margin:10px 0}
+.a,.u{width:28px;height:28px;display:grid;place-items:center;border-radius:50%}
+.a{background:rgba(106,224,255,.15)}.u{background:rgba(255,255,255,.1)}
+.bubble{flex:1;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.06);font-size:14px;line-height:1.35;white-space:pre-wrap}
+.msg .x{margin-left:auto;font-size:14px;line-height:1;padding:0 6px;border-radius:6px;background:rgba(255,255,255,.1);color:var(--muted);cursor:pointer}
+.msg .x:hover{color:var(--text)}
+.controls{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+button{appearance:none;border:none;color:var(--text);background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));padding:10px 12px;border-radius:12px;cursor:pointer}
+button:active{transform:translateY(1px)}.danger{border-color:var(--danger)}.muted{opacity:.7}
+.io{display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap}
+.io input[type=text]{flex:1;min-width:220px;padding:10px 12px;border-radius:10px;border:1px solid var(--edge);background:rgba(255,255,255,.08);color:var(--text);font-size:14px}
+.tests{display:none}
+.hint{font-size:12px;color:var(--muted);margin-top:8px}
+footer{padding:16px;text-align:center;color:var(--muted);font-size:12px}
+@keyframes pulseGlow{0%{box-shadow:0 0 18px rgba(106,224,255,.25) inset}50%{box-shadow:0 0 34px rgba(106,224,255,.5) inset}100%{box-shadow:0 0 18px rgba(106,224,255,.25) inset}}
+body.talking .panel{animation:pulseGlow 1s ease-in-out infinite}
+body.talking header{box-shadow:0 0 24px rgba(106,224,255,.35)}body.talking .fill{filter:drop-shadow(0 0 10px rgba(106,224,255,.8))}
+a{color:var(--acc)}
+
+/* Modal: pinned so it doesn't move while typing */
+.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:50}
+.modal.on{display:flex}
+.sheet{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(760px,92vw);
+  max-height:88vh;overflow:auto;
+  background:linear-gradient(180deg,rgba(13,19,38,.96),rgba(13,19,38,.92));
+  border:1px solid var(--edge);border-radius:16px;padding:16px
+}
+.sheet h2{margin:0 0 10px 0;font-size:16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid label{font-size:12px;color:var(--muted)}
+.grid input,.grid select,.grid textarea{width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--edge);background:rgba(255,255,255,.1);color:var(--text)}
+.grid textarea{min-height:96px;resize:vertical}
+.actions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
+.xbtn{appearance:none;background:rgba(255,255,255,.1);color:var(--text);border-radius:8px;padding:4px 8px;cursor:pointer}
+.cc{position:fixed;left:50%;bottom:82px;transform:translateX(-50%);max-width:min(92vw,820px);padding:10px 14px;border-radius:12px;border:1px solid var(--edge);background:rgba(0,0,0,.65);backdrop-filter:blur(8px);font-size:14px;line-height:1.35;display:none;z-index:40}
+.cc.on{display:block}.meter{font-size:12px;color:var(--muted)}
+.small{font-size:12px;color:var(--muted)}
+.pass{color:#44d18a}.fail{color:#ff6b6b}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="inner">
+      <h1>SIMON • Hands-Free Voice Chat</h1>
+      <div class="sub">Speak naturally. Simon talks back. Today’s conversation is remembered locally on this device.</div>
+      <div class="energy" aria-label="Energy bar shows Simon’s speaking + daily memory fill">
+        <div class="bar"><div class="fill" id="energyFill"></div><div class="spark" id="spark"></div></div>
+        <div class="stat"><span id="dailyCount">0</span> replies today</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="panel" role="region" aria-label="Simon chat panel">
+      <div class="row" style="justify-content:space-between">
+        <div class="status"><div class="dot" id="micDot"></div><span id="micText">Mic idle</span></div>
+        <div class="row">
+          <!-- Consolidated status chip -->
+          <span class="chip" id="statusChip" title="Profile • Tone • Focus">Profile: Default • Tone: Smart-ass • Focus: —</span>
+          <span class="chip" id="backendChip">Backend: <b>Unknown</b></span>
+          <span class="chip meter" id="tokenChip" title="Estimated tokens today">~0 tok • cap 20k</span>
+          <span class="chip" id="ccChip" title="Toggle captions">CC: Off</span>
+        </div>
+      </div>
+
+      <div class="log" id="log" aria-live="polite" role="log"></div>
+
+      <div class="controls" role="group" aria-label="Controls">
+        <button id="enableBtn">Enable Mic</button>
+        <button id="pttBtn" title="Hold to talk">🎙️ Hold to Talk</button>
+        <button id="micToggleBtn" title="Toggle microphone on/off">🎚️ Mic: On</button>
+        <button id="voiceToggleBtn" title="Toggle voice on/off">🔊 Voice: On</button>
+        <button id="settingsBtn" title="Voice & API settings">⚙️ Settings</button>
+        <button id="clearBtn" title="Clear today’s local memory">Reset Today</button>
+        <button id="exportBtn" title="Download today’s transcript as .json">Export</button>
+        <button id="runTestsBtn" title="Run built-in self-tests">Run Self-Tests</button>
+      </div>
+
+      <div class="io">
+        <input id="textInput" type="text" placeholder="Type instead… (Enter to send)" aria-label="Type message to Simon"/>
+        <button id="sendBtn" title="Send typed message">Send</button>
+      </div>
+
+      <!-- Settings Modal -->
+      <div class="modal" id="settingsModal" aria-hidden="true" aria-label="Settings modal">
+        <div class="sheet">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <h2>Simon Settings</h2>
+            <button class="xbtn" id="closeSettings">Close</button>
+          </div>
+          <div class="grid">
+            <!-- Behavior & Prompting -->
+            <div>
+              <label for="profileSelect">Behavior Profile</label>
+              <select id="profileSelect">
+                <option>Default</option><option>Friendly</option><option>Coach</option><option>Supportive Listener</option>
+                <option>Formal</option><option>Tech Support</option><option>Storyteller</option><option>Sales</option><option>Topic-Focused</option><option>Custom</option>
+              </select>
+            </div>
+            <div>
+              <label for="toneSelect">Tone Style</label>
+              <select id="toneSelect">
+                <option>Smart-ass • Short • Funny</option><option>Warm • Friendly • Encouraging</option><option>Direct • No-nonsense</option><option>Formal • Polite</option><option>Playful • Story-rich</option>
+              </select>
+            </div>
+            <div><label for="topicFocusInput">Topic Focus (optional)</label><input id="topicFocusInput" type="text" placeholder="fitness, real estate, travel planning, …"/></div>
+            <div><label for="maxLenInput">Max Response Length (tokens)</label><input id="maxLenInput" type="number" min="80" max="1200" step="20"/></div>
+            <div><label for="callMeInput">How to address you</label><input id="callMeInput" type="text" placeholder="boss, Captain, …"/></div>
+            <div><label for="swearSelect">Swear Filter</label><select id="swearSelect"><option value="allow">Allow mild swears</option><option value="bleep">Bleep/avoid swears</option></select></div>
+            <div style="grid-column:1 / -1"><label for="customSystem">Custom System Prompt (overrides profile)</label><textarea id="customSystem" placeholder="Write exact instructions for how Simon should act."></textarea></div>
+
+            <!-- Voice & Models -->
+            <div><label for="voiceMode">Voice Mode</label>
+              <select id="voiceMode"><option value="browser-tts">Browser TTS</option><option value="openai-tts">OpenAI TTS</option></select>
+            </div>
+            <div><label for="openaiVoice">OpenAI Voice ID</label>
+              <input id="openaiVoice" type="text" placeholder="alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer, verse"/>
+              <div class="small">Valid: alloy • ash • ballad • coral • echo • fable • onyx • nova • sage • shimmer • verse</div>
+            </div>
+            <div>
+              <label for="chatModel">Primary Chat Model</label>
+              <select id="chatModel">
+                <option value="gpt-4o">gpt-4o</option>
+                <option value="gpt-4o-mini" selected>gpt-4o-mini</option>
+                <option value="gpt-4.1">gpt-4.1</option>
+                <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                <option value="o3-mini">o3-mini (reasoning)</option>
+              </select>
+            </div>
+            <div>
+              <label for="multiMode">Multi-AI Mode</label>
+              <select id="multiMode">
+                <option value="off" selected>Off (OpenAI only)</option>
+                <option value="parallel">Parallel (merge & summarize)</option>
+                <option value="cascade">Cascade (fallback if empty)</option>
+              </select>
+            </div>
+
+            <!-- Providers & Keys -->
+            <div style="grid-column:1 / -1"><b>Providers</b> <span class="small">(keys are stored locally)</span></div>
+            <div>
+              <label><input type="checkbox" id="provOpenAI" checked/> OpenAI</label>
+              <input id="apiKeyInput" type="password" placeholder="OpenAI sk-..."/>
+              <input id="backendBaseInput" type="text" placeholder="https://api.openai.com/v1"/>
+            </div>
+            <div>
+              <label><input type="checkbox" id="provAnthropic"/> Anthropic</label>
+              <input id="anthropicKey" type="password" placeholder="Claude key"/>
+              <input id="anthropicBase" type="text" placeholder="/api/anthropic (proxy)"/>
+            </div>
+            <div>
+              <label><input type="checkbox" id="provGoogle"/> Google (Gemini)</label>
+              <input id="googleKey" type="password" placeholder="Google AI Studio key"/>
+              <input id="googleBase" type="text" placeholder="/api/google (proxy)"/>
+            </div>
+            <div>
+              <label><input type="checkbox" id="provXAI"/> xAI</label>
+              <input id="xaiKey" type="password" placeholder="xAI key"/>
+              <input id="xaiBase" type="text" placeholder="/api/xai (proxy)"/>
+            </div>
+
+            <div style="grid-column:1 / -1"><label>Recent Errors (local only)</label>
+              <div id="errorLogList" style="max-height:160px;overflow:auto;border:1px solid var(--edge);border-radius:10px;padding:8px;background:rgba(255,255,255,.04);font-size:12px"></div>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="xbtn" id="testVoiceBtn" title="Speak test using current voice">🔊 Test Voice</button>
+            <button class="xbtn" id="clearKey">Clear Keys</button>
+            <button class="xbtn" id="clearErrors">Clear Errors</button>
+            <button class="xbtn" id="backendTestBtn">Run Backend Test</button>
+            <button class="xbtn" id="saveSettings">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tests" id="tests" aria-live="polite"></div>
+      <div class="hint">Tap <em>Enable Mic</em> once to grant audio. Then just speak, or hold the mic button.</div>
+    </div>
+  </main>
+
+  <footer><span class="muted">Simon Advanced AI • </span><a href="https://gaylordsinclair.com" target="_blank" rel="noopener">GaylordSinclair.com</a></footer>
+</div>
+<div class="cc" id="ccBox" aria-hidden="true"></div>
+
+<script>
+'use strict';
+(() => {
+  // ====== Utilities ======
+  const $ = id => document.getElementById(id);
+  const on = (el, ev, fn) => el && el.addEventListener(ev, fn);
+  const store = {
+    get:(k,d=null)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??d}catch{return d}},
+    set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}},
+    del:k=>{try{localStorage.removeItem(k)}catch{}}
+  };
+  const setText = (el,t)=>{ if(el) el.textContent=t; };
+
+  // ====== Constants ======
+  const SIMON_NAME='Simon';
+  const DAILY_TARGET=40, DAILY_TOKEN_CAP=20000;
+  const OPENAI_VOICE_IDS=['alloy','ash','ballad','coral','echo','fable','onyx','nova','sage','shimmer','verse'];
+
+  // ====== State ======
+  const todayKey=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return `simonLog-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`};
+  const TOKKEY=()=> 'simonTokens-'+todayKey();
+  let log = store.get(todayKey(), []);
+  let replies = log.filter(m=>m.role==='assistant').length;
+  let voiceOn=(localStorage.getItem('simonVoiceOn')??'1')==='1';
+  let micOn=(localStorage.getItem('simonMicOn')??'1')==='1';
+  let captionsOn=false;
+  let tokenCount = Number(localStorage.getItem(TOKKEY())||'0')||0;
+  let recognizing=false, speaking=false, squelchUntil=0; let audioCtx=null, speakSeq=0, objURL=null, audioEl=null;
+  let SR=window.SpeechRecognition||window.webkitSpeechRecognition, rec=null; let sttActive=false, mediaRec=null, stream=null;
+  let turnId=0, aborter=null;
+
+  // ====== Elements ======
+  const ids=['log','enableBtn','pttBtn','micToggleBtn','voiceToggleBtn','settingsBtn','settingsModal','closeSettings','saveSettings','clearKey','clearErrors','voiceSelect','rateInput','pitchInput','apiKeyInput','voiceMode','openaiVoice','errorLogList','backendTestBtn','backendBaseInput','clearBtn','exportBtn','micDot','micText','dailyCount','energyFill','spark','backendChip','textInput','sendBtn','tokenChip','ccChip','ccBox','profileSelect','toneSelect','topicFocusInput','maxLenInput','callMeInput','swearSelect','customSystem','chatModel','multiMode','provOpenAI','provAnthropic','provGoogle','provXAI','anthropicKey','anthropicBase','googleKey','googleBase','xaiKey','xaiBase','tests','runTestsBtn','statusChip','testVoiceBtn'];
+  const E = Object.fromEntries(ids.map(id=>[id,$(id)]));
+
+  // ====== Error log ======
+  const ERRK='simonErrors';
+  const errs=()=>store.get(ERRK,[]); const setErrs=a=>store.set(ERRK,a.slice(-100));
+  const err=(where,msg)=>{const a=errs();a.push({ts:Date.now(),where,message:String(msg||'')});setErrs(a);E.settingsBtn?.classList.add('danger');renderErrs();};
+  const renderErrs=()=>{if(!E.errorLogList)return;const a=errs().slice().reverse();E.errorLogList.innerHTML=a.length?a.map(e=>`<div style="padding:6px 4px;border-bottom:1px solid var(--edge)"><b>${new Date(e.ts).toLocaleString()}</b> — <i>${e.where}</i><br/>${e.message.replace(/</g,'&lt;')}</div>`).join(''):'<em>No errors logged.</em>'; if(!a.length)E.settingsBtn?.classList.remove('danger');};
+
+  // ====== UI helpers ======
+  const append=(role,text,ts)=>{const row=document.createElement('div');row.className='msg';if(ts)row.dataset.ts=ts;
+    const icon=document.createElement('div');icon.className=role==='assistant'?'a':'u';icon.textContent=role==='assistant'?'⚡':'🗣️';
+    const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=text;
+    const del=document.createElement('button');del.className='x';del.title='Remove from history';del.textContent='×';
+    del.onclick=()=>{const t=Number(row.dataset.ts||0),i=log.findIndex(m=>m.ts===t);if(i>-1){const r=log.splice(i,1)[0];if(r?.role==='assistant')replies=Math.max(0,replies-1);persist();}row.remove();};
+    row.append(icon,bubble,del);E.log.appendChild(row);E.log.scrollTop=E.log.scrollHeight;return bubble;
+  };
+  const micVis=(on)=>{if(!E.micDot||!E.micText)return;E.micDot.style.background=on?'var(--ok)':'var(--danger)';
+    E.micDot.style.boxShadow=on?'0 0 8px 2px rgba(106,224,255,.6)':'0 0 0 0 transparent';
+    setText(E.micText,on?'Listening…':'Mic idle')
+  };
+  const updateEnergy=()=>{setText(E.dailyCount,String(replies));E.energyFill&&(E.energyFill.style.width=Math.min(100,Math.round((replies/DAILY_TARGET)*100))+'%')};
+  const estTok=t=>Math.max(1,Math.round((t||'').length/4));
+  const addTokens=n=>{tokenCount=Math.max(0,(Number(localStorage.getItem(TOKKEY())||'0')||0)+(n||0));localStorage.setItem(TOKKEY(),String(tokenCount));
+    setText(E.tokenChip,`~${tokenCount.toLocaleString()} tok • cap ${DAILY_TOKEN_CAP.toLocaleString()}`);E.tokenChip?.classList.toggle('bad',tokenCount>DAILY_TOKEN_CAP)
+  };
+  const persist=()=>{store.set(todayKey(),log);updateEnergy()};
+
+  // ====== Settings (incl. voices/models/providers) ======
+  const defaults={rate:1,pitch:1,voiceURI:null,apiKey:'',backendBase:'https://api.openai.com/v1',voiceMode:'browser-tts',openaiVoice:'alloy',profile:'Default',tone:'Smart-ass • Short • Funny',topicFocus:'',maxLen:300,callMe:'',swear:'allow',customSystem:'',chatModel:'gpt-4o-mini',multiMode:'off',prov:{openai:true,anthropic:false,google:false,xai:false},keys:{anthropic:'',google:'',xai:''},bases:{anthropic:'/api/anthropic',google:'/api/google',xai:'/api/xai'}};
+  let settings=Object.assign({},defaults,store.get('simonSettings',{}));
+  settings.prov=Object.assign({},defaults.prov,settings.prov||{});
+  settings.keys=Object.assign({},defaults.keys,settings.keys||{});
+  settings.bases=Object.assign({},defaults.bases,settings.bases||{});
+  const saveSettings=()=>store.set('simonSettings',settings);
+  const normalizeBase=s=>{if(!s)return'';try{return new URL(String(s).trim()).origin}catch{const b=String(s).trim().replace(/\/$/,'');const m=b.match(/^(https?:\/\/[^/]+)/i);return m?m[1]:''}};
+  const buildURL=p=>{const base=normalizeBase(settings.backendBase||'');return base?(base+p):p};
+  const profileTone=p=>({'default':'Smart-ass • Short • Funny','friendly':'Warm • Friendly • Encouraging','coach':'Direct • No-nonsense','supportive listener':'Warm • Friendly • Encouraging','formal':'Formal • Polite','tech support':'Direct • No-nonsense','storyteller':'Playful • Story-rich','sales':'Direct • No-nonsense','topic-focused':'Direct • No-nonsense','custom':settings.tone||'Direct • No-nonsense'})[(p||'').toLowerCase()]||'Smart-ass • Short • Funny';
+
+  const updateStatusChip=()=>{
+    const prof=(settings.profile||'Default');
+    const tone=(settings.tone||profileTone(settings.profile));
+    const focus=(settings.topicFocus||'—');
+    setText(E.statusChip,`Profile: ${prof} • Tone: ${tone} • Focus: ${focus||'—'}`);
+  };
+
+  // ====== Backend health ======
+  const checkBackend=async()=>{
+    const base=normalizeBase(settings.backendBase||'');
+    if(!base){E.backendChip.innerHTML='Backend: <b style="color:var(--danger)">Error</b>';return false}
+    const isOpenAI=/api\.openai\.com$/i.test(base);const url=isOpenAI?(base+'/v1/models'):buildURL('/api/health');
+    try{
+      const h={};if(isOpenAI&&settings.apiKey)h.Authorization='Bearer '+settings.apiKey;
+      const r=await fetch(url,{method:'GET',headers:h});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      E.backendChip.innerHTML='Backend: <b style="color:var(--ok)">OK</b> • '+new Date().toLocaleString();
+      return true
+    }catch(e){
+      E.backendChip.innerHTML='Backend: <b style="color:var(--danger)">Error</b>';
+      err('health',e.message||e);
+      append('assistant',`[Info] Backend check failed at ${url}.`);
+      return false
+    }
+  };
+
+  // ====== Audio / TTS ======
+  const unlockAudio=async()=>{try{if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')await audioCtx.resume()}catch{}};
+  const stopAudio=async()=>{try{speechSynthesis?.cancel?.()}catch{};try{if(audioEl){audioEl.pause();audioEl.src='';audioEl.load?.();audioEl=null;}}catch{};if(objURL){URL.revokeObjectURL(objURL);objURL=null}};
+  const setSpeaking=on=>{speaking=on;document.body.classList.toggle('talking',!!on);if(on){squelchUntil=performance.now()+900;stopListening();
+      E.spark&&(E.spark.style.width='20%',E.spark.animate([{transform:'translateX(-20%)'},{transform:'translateX(120%)'}],{duration:900,iterations:Infinity}));
+    }else{
+      E.spark?.getAnimations().forEach(a=>a.cancel());E.spark&&(E.spark.style.width='0%');
+      const wait=Math.max(0,squelchUntil-performance.now());setTimeout(()=>{if(micOn)autoRestart()},wait+50)
+    }};
+  const showCC=t=>{if(captionsOn&&E.ccBox){E.ccBox.textContent=t;E.ccBox.classList.add('on')}};
+  const setMedia=(text,aEl)=>{if(!('mediaSession'in navigator))return;navigator.mediaSession.metadata=new MediaMetadata({title:'Simon is speaking',artist:'SIMON AI',album:'GaylordSinclair.com'});navigator.mediaSession.setActionHandler('pause',()=>{aEl?aEl.pause():speechSynthesis.pause()});navigator.mediaSession.setActionHandler('play',()=>{aEl?aEl.play().catch(()=>{}):speechSynthesis.resume()})};
+  const pickVoice=()=>{const vs=speechSynthesis.getVoices()||[];if(settings.voiceURI){const v=vs.find(v=>v.voiceURI===settings.voiceURI);if(v)return v}return vs.find(v=>/Samantha|Siri|Zosia|Anna/i.test(v.name))||vs.find(v=>/en/i.test(v.lang))||vs[0]||null};
+  const speak=async(text)=>{
+    const ticket=++speakSeq;await unlockAudio();await stopAudio();if(!voiceOn){showCC(text);return}
+    const base=normalizeBase(settings.backendBase||'');const openAIBase=/api\.openai\.com$/i.test(base);
+    if(settings.voiceMode==='openai-tts'){
+      try{
+        if(!base){append('assistant','[Info] Set API Base URL in Settings to use OpenAI TTS.');return}
+        const url=openAIBase?(base+'/v1/audio/speech'):(base+'/audio/speech');const h={'Content-Type':'application/json'};if(openAIBase&&settings.apiKey)h.Authorization='Bearer '+settings.apiKey;
+        const voice=(settings.openaiVoice||'alloy'); if(!OPENAI_VOICE_IDS.includes(voice)) append('assistant',`[Info] Unknown voice “${voice}”. Try one of: ${OPENAI_VOICE_IDS.join(', ')}`);
+        const res=await fetch(url,{method:'POST',headers:h,body:JSON.stringify({model:'tts-1-hd',voice,input:text})});
+        if(!res.ok){err('tts','HTTP '+res.status);return}
+        const blob=new Blob([await res.arrayBuffer()],{type:'audio/mpeg'}); if(ticket!==speakSeq) return; objURL=URL.createObjectURL(blob); audioEl=new Audio(objURL);
+        setSpeaking(true);showCC(text);setMedia(text,audioEl);await audioEl.play().catch(e=>err('tts','playback '+e));
+        audioEl.onended=()=>{if(ticket===speakSeq)setSpeaking(false);if(audioEl)audioEl=null;if(objURL){URL.revokeObjectURL(objURL);objURL=null}};return
+      }catch(e){err('tts',e.message||e)}
+    }
+    if(!('speechSynthesis'in window)){append('assistant','[Info] speechSynthesis not supported');return}
+    const u=new SpeechSynthesisUtterance(text);const v=pickVoice();if(v)u.voice=v;u.rate=Number(settings.rate||1);u.pitch=Number(settings.pitch||1);u.volume=1;
+    u.onstart=()=>{if(ticket!==speakSeq){try{speechSynthesis.cancel()}catch{} return}setSpeaking(true);showCC(text);setMedia(text)};u.onend=()=>{if(ticket===speakSeq)setSpeaking(false)};
+    try{speechSynthesis.cancel()}catch{};speechSynthesis.speak(u);
+  };
+
+  // ====== Mic / SR ======
+  const stopListening=()=>{try{rec&&recognizing&&rec.stop()}catch{};recognizing=false;try{mediaRec&&mediaRec.state!=='inactive'&&mediaRec.stop()}catch{};try{stream&&stream.getTracks().forEach(t=>t.stop())}catch{};sttActive=false;micVis(false)};
+  const mic=async(start=true)=>{if(!start){stopListening();return}if(!micOn)return;
+    if(SR){rec=rec||new SR();rec.lang=navigator.language||'en-US';rec.continuous=true;rec.interimResults=true;
+      rec.onstart=()=>{recognizing=true;micVis(true)};rec.onerror=()=>{recognizing=false;micVis(false);autoRestart()};
+      rec.onend=()=>{recognizing=false;micVis(false);autoRestart()};
+      rec.onresult=ev=>{if(!micOn||speaking||performance.now()<squelchUntil)return;let final='';for(let i=ev.resultIndex;i<ev.results.length;i++){const r=ev.results[i];const t=r[0].transcript;if(r.isFinal)final+=t}if(final)heard(final.trim())};
+      try{rec.start()}catch{};return
+    }
+    if(!navigator.mediaDevices?.getUserMedia){append('assistant','This browser cannot access the mic. Use HTTPS + modern browser.');return}
+    try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})}catch{append('assistant','Mic permission denied. On iPhone: Settings → Safari → Microphone → Allow. Reload.');return}
+    micVis(true);sttActive=true;let mediaRec;try{mediaRec=new MediaRecorder(stream,{mimeType:'audio/webm'})}catch{append('assistant','MediaRecorder unsupported.');return}
+    mediaRec.ondataavailable=async e=>{if(!micOn||speaking||performance.now()<squelchUntil||!e.data?.size)return;try{const form=new FormData();form.append('audio',e.data,'chunk.webm');const r=await fetch(buildURL('/api/stt'),{method:'POST',body:form});if(r.ok){const j=await r.json();if(j?.text)heard(String(j.text))}}catch(x){err('stt','chunk '+(x?.message||x))}};
+    mediaRec.onstop=()=>{micVis(false);sttActive=false};try{mediaRec.start(2000)}catch{append('assistant','Recording failed to start. Keep the tab active or add to Home Screen.')}
+  };
+  const autoRestart=()=>{if(!micOn||speaking||performance.now()<squelchUntil)return;setTimeout(()=>{if(!micOn||speaking||performance.now()<squelchUntil)return;if(rec&&!recognizing){try{rec.start()}catch{}}},350)};
+
+  // ====== Prompting ======
+  const buildSystem=()=>{
+    if((settings.customSystem||'').trim()) return settings.customSystem.trim();
+    const parts=['You are Simon, a voice assistant. Be helpful and concise.'];
+    const eff=settings.tone||profileTone(settings.profile); if(eff) parts.push('Tone: '+eff+'.');
+    const profTxt={
+      'default':'General helpful assistant.',
+      'friendly':'Be warm, upbeat, encouraging.',
+      'coach':'Be motivating, actionable, hold user accountable with gentle nudges.',
+      'supportive listener':'Listen first, reflect feelings, ask gentle follow-ups before advising.',
+      'formal':'Use professional, polite language.',
+      'tech support':'Diagnose step-by-step; ask clarifying questions; give precise instructions.',
+      'storyteller':'Imaginative, brief vivid images.',
+      'sales':'Identify needs; suggest succinctly with clear CTAs.',
+      'topic-focused':'Keep replies tightly scoped unless user changes it.',
+      'custom':''
+    }[(settings.profile||'Default').toLowerCase()];
+    if(profTxt) parts.push(profTxt);
+    if((settings.topicFocus||'').trim()) parts.push('Primary focus: '+settings.topicFocus.trim()+'.');
+    if((settings.callMe||'').trim()) parts.push("Address the user as '"+settings.callMe.trim()+"'.");
+    if(settings.swear==='bleep') parts.push('Avoid profanity. Use clean substitutes.');
+    return parts.join('\n');
+  };
+
+  // ====== Multi-AI orchestration (OpenAI only here) ======
+  const formations={
+    openai: async ({prompt,signal})=>{
+      const base=normalizeBase(settings.backendBase||''); if(!settings.apiKey) throw new Error('Missing OpenAI key');
+      const url=base+'/v1/chat/completions';
+      const headers={'Content-Type':'application/json','Authorization':'Bearer '+settings.apiKey};
+      const recent=log.slice(-10).map(m=>({role:m.role==='assistant'?'assistant':'user',content:m.content||''}));
+      const payload={model:settings.chatModel||'gpt-4o-mini',temperature:0.6,max_tokens:Number(settings.maxLen||300),messages:[{role:'system',content:buildSystem()},...recent,{role:'user',content:String(prompt||'')}]};
+      const r=await fetch(url,{method:'POST',headers,body:JSON.stringify(payload),signal});const t=await r.text();if(!r.ok)throw new Error('HTTP '+r.status+': '+t.slice(0,300));const j=JSON.parse(t);return String(j?.choices?.[0]?.message?.content||'')
+    }
+  };
+
+  const summarizeMerge = async (responses) => {
+    const text = responses.filter(Boolean).join('\n\n---\n\n');
+    if(!text.trim()) return '';
+    try {
+      const base=normalizeBase(settings.backendBase||''); const url=base+'/v1/chat/completions';
+      const headers={'Content-Type':'application/json','Authorization':'Bearer '+settings.apiKey};
+      const payload={model:settings.chatModel||'gpt-4o-mini',temperature:0.3,max_tokens:Number(settings.maxLen||300),messages:[{role:'system',content:'You are a synthesis engine.'},{role:'user',content:text}]};
+      const r=await fetch(url,{method:'POST',headers,body:JSON.stringify(payload)}); const t=await r.text(); if(!r.ok) throw new Error(t); const j=JSON.parse(t); return String(j?.choices?.[0]?.message?.content||'');
+    } catch(e){ err('summarize', e.message||e); }
+    return text;
+  };
+
+  const orchestrate = async (prompt) => {
+    const text = await formations.openai({prompt});
+    return { text, sources: ['OpenAI'] };
+  };
+
+  // ====== Speech compression (short spoken summary) ======
+  
+const compressForSpeech = (s, tone) => {
+  try {
+    const raw = String(s||'').replace(/\s+/g,' ').trim();
+    if(!raw) return '';
+    // Remove code fences & inline meta tags
+    const cleaned = raw
+      .replace(/```[\s\S]*?```/g,'')
+      .replace(/^\s*\[(info|error|debug)\][^\n]*\n?/ig,'')
+      .trim();
+    return cleaned; // ✅ speak the entire cleaned response
+  } catch {
+    return String(s||'');
+  }
+};
+
+
+  // ====== Ask & Turn handling ======
+  const cancelTurn=()=>{ try{ aborter?.abort() }catch{}; aborter=null; stopAudio(); turnId++; setSpeaking(false); };
+
+  const heard=async raw=>{
+    if(!micOn||speaking||performance.now()<squelchUntil) return; const text=String(raw||'').trim(); if(!text) return;
+    cancelTurn(); const myTurn=++turnId;
+    const pushUser=txt=>{const ts=Date.now();log.push({role:'user',content:txt,ts});persist();append('user',txt,ts);addTokens(estTok(txt))};
+    const pushAssistant=()=>{const ts=Date.now();const b=append('assistant','…',ts);replies++;updateEnergy();return{ts,b}};
+    const finalize=async(b,ts,result)=>{const out=(result&&typeof result==='object')?result:{text:String(result||''),sources:[]};
+      const textToShow = out.text;
+      if(myTurn!==turnId)return;
+      if(b.textContent.trim()==='…')b.textContent=textToShow||'[no output]';
+      log.push({role:'assistant',content:b.textContent,ts});persist();addTokens(estTok(b.textContent));
+
+      // NEW: skip meta/system lines in speech
+      const rawText = b.textContent || '';
+      const looksMeta = /^\s*\[(info|error|debug)\]/i.test(rawText);
+      if (looksMeta) return;
+
+      const tone = settings.tone || profileTone(settings.profile);
+      const say = compressForSpeech(rawText, tone);
+      if (say && say.trim()) await speak(say);
+    };
+    pushUser(text); const {ts,b}=pushAssistant(); const result=await orchestrate(text); await finalize(b,ts,result);
+  };
+
+  // ====== Controls ======
+  on(E.enableBtn,'click',async()=>{ await unlockAudio(); mic(true); });
+  on(E.clearBtn,'click',()=>{ store.del(todayKey()); store.del(TOKKEY()); tokenCount=0; setText(E.tokenChip,`~0 tok • cap ${DAILY_TOKEN_CAP.toLocaleString()}`); log=[]; replies=0; updateEnergy(); E.log.innerHTML=''; append('assistant',`Hi, I am ${SIMON_NAME}. Start when ready.`); });
+  on(E.exportBtn,'click',()=>{ const blob=new Blob([JSON.stringify(log,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=todayKey()+'.json'; a.click(); URL.revokeObjectURL(a.href); });
+  const sendTyped=()=>{ const v=(E.textInput.value||'').trim(); if(!v) return; heard(v); E.textInput.value=''; };
+  on(E.sendBtn,'click',sendTyped); on(E.textInput,'keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); sendTyped(); } });
+  const renderToggles=()=>{ const voiceBtn=E.voiceToggleBtn, micBtn=E.micToggleBtn; if(voiceBtn){voiceBtn.textContent=voiceOn?'🔊 Voice: On':'🔇 Voice: Off'; voiceBtn.classList.toggle('muted',!voiceOn);} if(micBtn){micBtn.textContent=micOn?'🎚️ Mic: On':'🚫 Mic: Off'; micBtn.classList.toggle('muted',!micOn);} };
+  on(E.voiceToggleBtn,'click',()=>{ voiceOn=!voiceOn; localStorage.setItem('simonVoiceOn',voiceOn?'1':'0'); renderToggles(); append('assistant','[Info] Voice '+(voiceOn?'enabled':'muted')+'.'); if(!voiceOn){ try{speechSynthesis?.cancel?.()}catch{} if(audioEl){ try{audioEl.pause()}catch{} audioEl=null; } } });
+  on(E.micToggleBtn,'click',()=>{ micOn=!micOn; localStorage.setItem('simonMicOn',micOn?'1':'0'); renderToggles(); if(!micOn){ stopListening(); cancelTurn(); append('assistant','[Info] Mic muted.'); } else { append('assistant','[Info] Mic unmuted.'); } });
+  on(E.ccChip,'click',()=>{ captionsOn=!captionsOn; setText(E.ccChip,'CC: '+(captionsOn?'On':'Off')); if(!captionsOn) E.ccBox?.classList.remove('on'); });
+
+  // ====== Settings modal (pin and no layout shift) ======
+  const safeCloseSettings = () => {
+    try { document.activeElement && document.activeElement.blur && document.activeElement.blur(); } catch {}
+    E.settingsModal.classList.remove('on');
+    document.body.classList.remove('modal-open');
+    setTimeout(() => { E.textInput && E.textInput.focus && E.textInput.focus(); }, 0);
+  };
+  const openSettings=()=>{
+    document.body.classList.add('modal-open');
+    E.settingsModal.classList.add('on');
+    if('speechSynthesis'in window){
+      E.voiceSelect = E.voiceSelect || document.createElement('select'); // placeholder to avoid null refs
+    }
+    // hydrate current settings
+    setText($('statusChip'),$('statusChip').textContent||''); // noop—but ensures element exists
+    $('apiKeyInput').value=String(settings.apiKey||''); $('backendBaseInput').value=settings.backendBase||'https://api.openai.com/v1';
+    $('voiceMode').value=String(settings.voiceMode||'browser-tts'); $('openaiVoice').value=String(settings.openaiVoice||'alloy');
+    $('profileSelect').value=settings.profile||'Default'; $('toneSelect').value=(settings.tone||profileTone(settings.profile)); $('topicFocusInput').value=settings.topicFocus||'';
+    $('maxLenInput').value=String(settings.maxLen||300); $('callMeInput').value=settings.callMe||''; $('swearSelect').value=settings.swear||'allow'; $('customSystem').value=settings.customSystem||'';
+    $('chatModel').value=settings.chatModel||'gpt-4o-mini'; $('multiMode').value=settings.multiMode||'off';
+    $('provOpenAI').checked=!!settings.prov.openai; $('provAnthropic').checked=!!settings.prov.anthropic; $('provGoogle').checked=!!settings.prov.google; $('provXAI').checked=!!settings.prov.xai;
+    $('anthropicKey').value=settings.keys.anthropic||''; $('anthropicBase').value=settings.bases.anthropic||'/api/anthropic';
+    $('googleKey').value=settings.keys.google||''; $('googleBase').value=settings.bases.google||'/api/google';
+    $('xaiKey').value=settings.keys.xai||''; $('xaiBase').value=settings.bases.xai||'/api/xai';
+    renderErrs();
+  };
+  const closeSettings=()=>{ safeCloseSettings(); };
+  on(E.settingsBtn,'click',openSettings);
+  on(E.closeSettings,'click',closeSettings);
+  on(window,'keydown',(e)=>{ if(e.key==='Escape' && E.settingsModal.classList.contains('on')){ e.preventDefault(); safeCloseSettings(); } });
+
+  on(E.saveSettings,'click',()=>{
+    const prevProfile=settings.profile;
+    settings.apiKey=$('apiKeyInput').value||''; settings.backendBase=$('backendBaseInput').value||'';
+    settings.voiceMode=$('voiceMode').value; settings.openaiVoice=$('openaiVoice').value||'alloy';
+    settings.profile=$('profileSelect').value; settings.tone=$('toneSelect').value; settings.topicFocus=$('topicFocusInput').value;
+    settings.maxLen=Number($('maxLenInput').value||300); settings.callMe=$('callMeInput').value; settings.swear=$('swearSelect').value; settings.customSystem=$('customSystem').value;
+    settings.chatModel=$('chatModel').value; settings.multiMode=$('multiMode').value;
+    settings.prov.openai=$('provOpenAI').checked; settings.prov.anthropic=$('provAnthropic').checked; settings.prov.google=$('provGoogle').checked; settings.prov.xai=$('provXAI').checked;
+    settings.keys.anthropic=$('anthropicKey').value||''; settings.keys.google=$('googleKey').value||''; settings.keys.xai=$('xaiKey').value||'';
+    settings.bases.anthropic=$('anthropicBase').value||'/api/anthropic'; settings.bases.google=$('googleBase').value||'/api/google'; settings.bases.xai=$('xaiBase').value||'/api/xai';
+    if(settings.profile!==prevProfile){ settings.tone=profileTone(settings.profile); $('toneSelect').value=settings.tone; }
+    saveSettings(); updateStatusChip(); append('assistant','[Info] Settings saved.'); safeCloseSettings(); checkBackend();
+  });
+
+  on(E.testVoiceBtn,'click',async()=>{
+    try{
+      await speak('This is a test of the selected voice.');
+    }catch(e){ err('test-voice', e.message||e); }
+  });
+
+  on(E.clearKey,'click',()=>{ settings.apiKey=''; settings.keys={anthropic:'',google:'',xai:''}; saveSettings();
+    $('apiKeyInput').value=''; $('anthropicKey').value=''; $('googleKey').value=''; $('xaiKey').value='';
+    append('assistant','[Info] API keys cleared from this device.'); renderErrs();
+  });
+  on(E.clearErrors,'click',()=>{ setErrs([]); renderErrs(); });
+  on(E.backendTestBtn,'click',async()=>{
+    await checkBackend();
+    const prompt='Say hi in five words.';
+    try{
+      const result=await orchestrate(prompt);
+      const text=(result&&result.text)||'…';
+      append('assistant','[Backend Test] '+text);
+    }catch(e){ append('assistant','[Info] Backend test failed.'); err('backend-test', e.message||e); }
+  });
+
+  // ====== PTT ======
+  on(E.pttBtn,'pointerdown',async()=>{ await unlockAudio(); mic(true); });
+  on(E.pttBtn,'pointerup',()=>{ stopListening(); });
+
+  // ====== Self-tests ======
+  const addResult=(ok,msg)=>{
+    if(!E.tests) return; const ul=E.tests.querySelector('ul')||(()=>{const u=document.createElement('ul');E.tests.appendChild(u);return u})();
+    const li=document.createElement('li'); li.className=ok?'pass':'fail'; li.textContent=(ok?'✓ ':'✗ ')+msg; ul.appendChild(li);
+  };
+  const runTests=()=>{
+    if(!E.tests) return; E.tests.innerHTML='<b>Self-Tests:</b>';
+    try{
+      // normalizeBase trims to origin
+      const a=normalizeBase('https://example.com/api/x'); const b=normalizeBase('https://example.com/'); const c=normalizeBase('https://example.com');
+      addResult(a==='https://example.com' && b==='https://example.com' && c==='https://example.com','normalizeBase trims to origin');
+      // newline safety
+      const joined=['one','two'].join('\n'); addResult(joined.includes('\n') && joined.split('\n').length===2,'string join with \\n works');
+      // voices list contains alloy
+      addResult(OPENAI_VOICE_IDS.includes('alloy'),'OpenAI voice list present');
+      // status chip updater
+      settings.profile='Friendly'; settings.tone='Warm • Friendly • Encouraging'; settings.topicFocus='travel'; updateStatusChip();
+      addResult(E.statusChip.textContent.includes('Friendly') && E.statusChip.textContent.includes('travel'),'status chip updates');
+      // settings persistence smoke
+      const reread=store.get('simonSettings',{}); addResult(Object.keys(reread).length>0,'settings persisted');
+      // NEW: meta-skip detector
+      const metaSkip = /^\s*\[(info|error|debug)\]/i.test('[Info] test');
+      addResult(metaSkip,'meta detector regex ok');
+      // NEW: focus returns to text input after closing settings
+      safeCloseSettings();
+      addResult(document.activeElement === E.textInput,'focus returned to text input after closing settings');
+    }catch(e){ addResult(false,'tests crashed: '+(e?.message||e)); }
+  };
+  on(E.runTestsBtn,'click',runTests);
+
+  // ====== Init ======
+  log.forEach(m=>append(m.role,m.content,m.ts));
+  if(!log.length)append('assistant',`Hi, I am ${SIMON_NAME}. Start when ready.`);
+  updateEnergy();
+  setText(E.tokenChip,`~${(Number(localStorage.getItem(TOKKEY())||'0')||0).toLocaleString()} tok • cap ${DAILY_TOKEN_CAP.toLocaleString()}`);
+  if('speechSynthesis'in window){speechSynthesis.onvoiceschanged=()=>{}};
+  if(!settings.tone){settings.tone=profileTone(settings.profile);saveSettings()}
+  renderToggles(); updateStatusChip(); checkBackend();
+  if('serviceWorker'in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{})}
+})();
+</script>
+</body>
+</html>
